@@ -1,0 +1,195 @@
+---
+title: "Capstone Project - Pollination Date Prediction"
+author: "Tom Gocken"
+date: "Monday, February 15, 2016"
+output: html_document
+---
+
+## Introduction
+Research sites that develop new plant varieties must predict when certain seasonal events, such as pollination, will occur. These events drive work timelines and allocation of resources. The timing of these events depends on 1) planting date, 2) variety maturity expressed in growing degree units (GDUs) required to reach a specified growth stage, such as pollination or physiological maturity, and 3) how rapidly GDUs accumulate during the growing season. While planting date and variety maturity are known values determined by the researcher, the rate of GDU accumulation depends on conditions that vary by growing season and location.
+
+A linear regression model was developed to predict GDU accumulation during the growing season at five research sites in the U.S. Midwest. Examples are provided demonstrating how predicted accumulated GDUs can be combined with inputs for planting date and variety maturity to predict pollination date and to model planting scenarios.
+
+## Data Sources
+
+* Environmental data for counties of interest: http://wonder.cdc.gov/EnvironmentalData.html
+    + *List variables and provide definitions*
+* County centroid coordinates: https://www.census.gov/geo/maps-data/data/gazetteer.html
+* Monthly ERSST data measuring El Nino / La Nina effects: http://www.cpc.noaa.gov/products/analysis_monitoring/ensostuff/ensoyears.shtml
+
+## GDU Calculation Method
+Growing degree units (GDUs), also known as growing degree days, were calculated by taking the average of the daily maximum and minimum temperatures compared to a base temperature, T~base~, as follows:
+
+#### GDU = ((T~max~ + T~min~) / 2) -- T~base~
+
+where T~max~ is equal to the maximum daily temperature but not greater than a defined upper limit and T~min~ is equal to the minimum daily temperature but not less than the base temperature. The upper limit and base in this project were set to 50°F and 86°F (10°C and 50°C), respectively, typical values for corn.
+
+#### References
+
+* http://en.wikipedia.org/wiki/Growing_degree-day
+* http://agron-www.agron.iastate.edu/Courses/agron212/Calculations/GDD.htm
+
+## Data Wrangling Steps
+*Add from previous project*
+
+## Exploratory Data Analysis
+*Add yearly temperature yearly trend, loc differences*
+
+## Model Building
+
+* Create data subset representing U.S. Midwest crop growing season
+* Create training (1992-2009) and test (2010-2011) datasets
+
+```{r}
+setwd("C:/Projects/springboard-capstone")
+envdat <- read.delim("../data/envdat.txt") # Previously created tidy dataset
+envdat_inseason <- subset(envdat, day_of_yr >= 90 & day_of_yr < 300)
+envdat_train <- subset(envdat_inseason, year < 2010)
+envdat_test <- subset(envdat_inseason, year >= 2010)
+```
+
+* Correlations
+
+```{r}
+# Correlation among dependent variable (agdu) and independent variables
+cor(dplyr::select(envdat, -county, -date)) # all numeric variables
+cor(dplyr::select(envdat, agdu, day_of_yr, latitude, year, ersst))
+
+# model 1
+gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + latitude + year + ersst, data = envdat_train)
+summary(gs1)
+plot(predict(gs1), residuals(gs1), type = "p")
+
+pred1 <- predict(gs1, newdata = envdat_test)
+gs1pred <- predict(gs1, envdat_test)
+xx <- data.frame(obs = envdat_test$agdu, pred = gs1pred^2)
+
+## R sq for test data
+caret::defaultSummary(xx)
+
+## Plot of predicted by observed values
+plot(xx)
+
+xy <- data.frame(envdat_test$county, envdat_test$day_of_yr, agdu_obs = envdat_test$agdu, agdu_pred = gs1pred^2)
+head(xy)
+
+xy <- data.frame(envdat_test, agdu_pred = gs1pred^2)
+
+```
+
+## Modeling Scenarios
+* Given planting date and variety maturity, use predicted accumulated GDUs to predict pollination date.
+* Plant development is only affected by GDUs after planting. GDUs prior to planting are subtracted in variable agdu_ap_pred.
+* Predicted pollination date is the date when gdu_mat1 is reached as defined in scenario1.3.
+
+#### Example 1: A researcher plants two varieties on the same date, one that pollinates at 1200 GDUs and one that pollinates at 1400 GDUs. Predict the date each variety will pollinate.
+
+```{r}
+# Scenario 1 inputs:
+loc1 <- "Iowa County, IA"
+plant_yr1 <- 2011
+plant_day1 <- 112
+gdu_mat1 <- 1200
+
+# Scenario 2 inputs:
+loc2 <- "Iowa County, IA"
+plant_yr2 <- 2011
+plant_day2 <- 112
+gdu_mat2 <- 1400
+
+scenario1.1 <- subset(xy, county == loc1 
+                      & year == plant_yr1 
+                      & day_of_yr == plant_day1 - 1)
+scenario1.2 <- dplyr::mutate(subset(xy, county == loc1 
+                                    & year == plant_yr1 
+                                    & day_of_yr >= plant_day1),
+                             agdu_ap_pred = agdu_pred - scenario1.1$agdu_pred)
+scenario1.3 <- dplyr::filter(scenario1.2, abs(agdu_ap_pred - gdu_mat1) 
+                             == min(abs(agdu_ap_pred - gdu_mat1)))
+
+scenario2.1 <- subset(xy, county == loc2 
+                      & year == plant_yr2 
+                      & day_of_yr == plant_day2 - 1)
+scenario2.2 <- dplyr::mutate(subset(xy, county == loc2 
+                                    & year == plant_yr2 
+                                    & day_of_yr >= plant_day2),
+                             agdu_ap_pred = agdu_pred - scenario2.1$agdu_pred)
+scenario2.3 <- dplyr::filter(scenario2.2, abs(agdu_ap_pred - gdu_mat2)
+                             == min(abs(agdu_ap_pred - gdu_mat2)))
+
+library(ggplot2)
+ggplot(mapping = aes(x = day_of_yr, y = agdu_ap_pred)) +
+  geom_line(data = scenario1.2, color = "blue", size = 1) +
+  geom_segment(aes(x = min(scenario1.2$day_of_yr), y = gdu_mat1,
+                   xend = scenario1.3$day_of_yr, yend = gdu_mat1),
+               size = 1, linetype = 3) +
+  geom_segment(aes(x = scenario1.3$day_of_yr, y = 0,
+                   xend = scenario1.3$day_of_yr, yend = gdu_mat1),
+               size = 1, linetype = 3) +
+  geom_line(data = scenario2.2, color = "red", size = 1) +
+  geom_segment(aes(x = min(scenario2.2$day_of_yr), y = gdu_mat2,
+                   xend = scenario2.3$day_of_yr, yend = gdu_mat2),
+               size = 1, linetype = 3) +
+  geom_segment(aes(x = scenario2.3$day_of_yr, y = 0,
+                   xend = scenario2.3$day_of_yr, yend = gdu_mat2),
+               size = 1, linetype = 3)
+scenario1.3$date
+scenario2.3$date
+```
+#### Example 2: A researcher intended to plant on April 9 (day 100) but was delayed for 14 days due to rain. Predict the number of days that pollination will be delayed.
+
+```{r}
+# Scenario 1 inputs:
+loc1 <- "Darke County, OH"
+plant_yr1 <- 2011
+plant_day1 <- 100
+gdu_mat1 <- 1300
+
+# Scenario 2 inputs:
+loc2 <- "Darke County, OH"
+plant_yr2 <- 2011
+plant_day2 <- 114
+gdu_mat2 <- 1300
+
+scenario1.1 <- subset(xy, county == loc1 
+                      & year == plant_yr1 
+                      & day_of_yr == plant_day1 - 1)
+scenario1.2 <- dplyr::mutate(subset(xy, county == loc1 
+                                    & year == plant_yr1 
+                                    & day_of_yr >= plant_day1),
+                             agdu_ap_pred = agdu_pred - scenario1.1$agdu_pred)
+scenario1.3 <- dplyr::filter(scenario1.2, abs(agdu_ap_pred - gdu_mat1) 
+                             == min(abs(agdu_ap_pred - gdu_mat1)))
+
+scenario2.1 <- subset(xy, county == loc2 
+                      & year == plant_yr2 
+                      & day_of_yr == plant_day2 - 1)
+scenario2.2 <- dplyr::mutate(subset(xy, county == loc2 
+                                    & year == plant_yr2 
+                                    & day_of_yr >= plant_day2),
+                             agdu_ap_pred = agdu_pred - scenario2.1$agdu_pred)
+scenario2.3 <- dplyr::filter(scenario2.2, abs(agdu_ap_pred - gdu_mat2)
+                             == min(abs(agdu_ap_pred - gdu_mat2)))
+
+ggplot(mapping = aes(x = day_of_yr, y = agdu_ap_pred)) +
+  geom_line(data = scenario1.2, color = "blue", size = 1) +
+  geom_segment(aes(x = min(scenario1.2$day_of_yr), y = gdu_mat1,
+                   xend = scenario1.3$day_of_yr, yend = gdu_mat1),
+               size = 1, linetype = 3) +
+  geom_segment(aes(x = scenario1.3$day_of_yr, y = 0,
+                   xend = scenario1.3$day_of_yr, yend = gdu_mat1),
+               size = 1, linetype = 3) +
+  geom_line(data = scenario2.2, color = "red", size = 1) +
+  geom_segment(aes(x = min(scenario2.2$day_of_yr), y = gdu_mat2,
+                   xend = scenario2.3$day_of_yr, yend = gdu_mat2),
+               size = 1, linetype = 3) +
+  geom_segment(aes(x = scenario2.3$day_of_yr, y = 0,
+                   xend = scenario2.3$day_of_yr, yend = gdu_mat2),
+               size = 1, linetype = 3)
+
+scenario1.3$date
+scenario2.3$date
+```
+Because GDUs accumulate more slowly in the early spring, a 14 day planting delay is predicted to result in only a 5 day delay in pollination.
+
+## Conclusions
