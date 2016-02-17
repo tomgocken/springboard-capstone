@@ -2,7 +2,7 @@
 title: "Capstone Project - Pollination Date Prediction"
 author: "Tom Gocken"
 date: "Monday, February 15, 2016"
-output: html_document
+output: word_document
 ---
 
 ## Introduction
@@ -49,74 +49,67 @@ envdat_test <- subset(envdat_inseason, year >= 2010)
 ```
 
 #### Correlations
-The selection of model terms was based, in part, on practical concerns. Generally speaking, daily measurements for environmental variables, such as precip, sunlight, etc. will not be available for the season we wish to predict.
+The selection of model terms was based, in part, on practical concerns. Generally speaking, daily measurements for environmental variables, such as Precipitation, Sunlight, etc. will not be available for the season we wish to predict.
 
-Fortunately, some of the remaining variables are expected to be good predictors of agdu. A very high correlation was seen between agdu and day_of_year and lower but potentially meaningful correlations between agdu and latitude and ersst. Although an annual trend for increasing temperatures was observed over the 20 year period of the dataset, correlation between year and agdu was relatively weak. Corrlation between agdu and latitude was also low. Unlike longitude, which measures distance in the North/South direction, latitude, which measures distance in the East/West direction, was not expected to be strongly associated with heat accumulation.
+Fortunately, some of the remaining variables are expected to be good predictors of AGDU. A very high correlation was seen between agdu and Day of Year and lower but potentially meaningful correlations were seen between AGDU and Latitude and ERSST. Although an annual trend for increasing temperatures was observed over the 20 year period of the dataset, the correlation between AGDU and Year was relatively weak. Corrlation between AGDU and Latitude was also low. Unlike Longitude, which measures distance in the North/South direction, Latitude, which measures distance in the East/West direction, was not expected to be strongly associated with heat accumulation. Except for a correlation between Year and ERSST of 0.24, collinearity among variables was very low.
 
 ```{r}
 cor(dplyr::select(envdat_inseason, agdu, day_of_yr, latitude, longitude, ersst, year))
 ```
 
-Although correlation between agdu and day_of_yr is much higher than with any other dependent variable, the relationship is not linear.
+Although correlation between AGDU and Day of Year is much higher than with any other dependent variable, the relationship is not linear.
 
 ```{r}
 plot(envdat_inseason$day_of_yr, envdat_inseason$agdu)
 ```
+
 *Describe choice of polynomial model for day_of_yr*
+
+#### Possible Models
+Model 1 had an R^2^ of 0.941 for test data based only on 3rd order polynomial terms for Day of Year. Adding Latitude to Model 2 resulted in an R^2^ of 0.993 for test data and further adding ERSST to Model 3 resulted in and R^2^ of 0.994 for test data.
+
+Inclusion of Day of Year and Latitude are obvious choices. While ERSST adds little to the already very high R^2^, Model 3 was selected since ERSST data is readily available and evidence exists that El Nino events (expressed as negative ERSST values) correspond to lower than normal U.S. Midwest summer temperatures and that La Nina events (expressed as positive ERSST values) correspond to higher than normal U.S. Midwest summer temperatures.
+
+References:
+http://info.agribank.com/agrithought/Documents/AgriThought_ElNino2015_Final.pdf
+http://agron-www.agron.iastate.edu/courses/Agron541/classes/541/lesson11b/11b.4.html
+
 ```{r}
-# model 1
-gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + latitude + year + ersst, data = envdat_train)
+# Model 1 training data
+gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3), data = envdat_train)
 summary(gs1)
-plot(predict(gs1), residuals(gs1), type = "p")
-
+# Model 1 test data
 pred1 <- predict(gs1, newdata = envdat_test)
 gs1pred <- predict(gs1, envdat_test)
 xx <- data.frame(obs = envdat_test$agdu, pred = gs1pred^2)
-
 ## R sq for test data
 caret::defaultSummary(xx)
 
-## Plot of predicted by observed values
-plot(xx)
-
-# model 2
-gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + latitude + ersst, data = envdat_train)
-summary(gs1)
-plot(predict(gs1), residuals(gs1), type = "p")
-
-pred1 <- predict(gs1, newdata = envdat_test)
-gs1pred <- predict(gs1, envdat_test)
-xx <- data.frame(obs = envdat_test$agdu, pred = gs1pred^2)
-
-## R sq for test data
-caret::defaultSummary(xx)
-
-## Plot of predicted by observed values
-plot(xx)
-
-# model 3
+# Model 2 training data
 gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + latitude, data = envdat_train)
 summary(gs1)
-plot(predict(gs1), residuals(gs1), type = "p")
-
+# Model 2 test data
 pred1 <- predict(gs1, newdata = envdat_test)
 gs1pred <- predict(gs1, envdat_test)
 xx <- data.frame(obs = envdat_test$agdu, pred = gs1pred^2)
-
 ## R sq for test data
 caret::defaultSummary(xx)
 
-## Plot of predicted by observed values
+# Model 3 training data
+gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + latitude + ersst, data = envdat_train)
+summary(gs1)
+# Model 3 test data
+pred1 <- predict(gs1, newdata = envdat_test)
+gs1pred <- predict(gs1, envdat_test)
+xx <- data.frame(obs = envdat_test$agdu, pred = gs1pred^2)
+## R sq for test data
+caret::defaultSummary(xx)
+
+plot(predict(gs1), residuals(gs1))
 plot(xx)
-
-xy <- data.frame(envdat_test$county, envdat_test$day_of_yr, agdu_obs = envdat_test$agdu, agdu_pred = gs1pred^2)
-head(xy)
-
-xy <- data.frame(envdat_test, agdu_pred = gs1pred^2)
-
 ```
 
-## Modeling Scenarios
+## Prediction Scenarios
 * Given planting date and variety maturity, use predicted accumulated GDUs to predict pollination date.
 * Plant development is only affected by GDUs after planting. GDUs prior to planting are subtracted in variable agdu_ap_pred.
 * Predicted pollination date is the date when gdu_mat# is reached as defined in scenario#.3.
