@@ -48,15 +48,54 @@ envdat_train <- subset(envdat_inseason, year < 2010)
 envdat_test <- subset(envdat_inseason, year >= 2010)
 ```
 
-* Correlations
+#### Correlations
+The selection of model terms was based, in part, on practical concerns. Generally speaking, daily measurements for environmental variables, such as precip, sunlight, etc. will not be available for the season we wish to predict.
+
+Fortunately, some of the remaining variables are expected to be good predictors of agdu. A very high correlation was seen between agdu and day_of_year and lower but potentially meaningful correlations between agdu and latitude and ersst. Although an annual trend for increasing temperatures was observed over the 20 year period of the dataset, correlation between year and agdu was relatively weak. Corrlation between agdu and latitude was also low. Unlike longitude, which measures distance in the North/South direction, latitude, which measures distance in the East/West direction, was not expected to be strongly associated with heat accumulation.
 
 ```{r}
-# Correlation among dependent variable (agdu) and independent variables
-cor(dplyr::select(envdat, -county, -date)) # all numeric variables
-cor(dplyr::select(envdat, agdu, day_of_yr, latitude, year, ersst))
+cor(dplyr::select(envdat_inseason, agdu, day_of_yr, latitude, longitude, ersst, year))
+```
 
+Although correlation between agdu and day_of_yr is much higher than with any other dependent variable, the relationship is not linear.
+
+```{r}
+plot(envdat_inseason$day_of_yr, envdat_inseason$agdu)
+```
+*Describe choice of polynomial model for day_of_yr*
+```{r}
 # model 1
 gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + latitude + year + ersst, data = envdat_train)
+summary(gs1)
+plot(predict(gs1), residuals(gs1), type = "p")
+
+pred1 <- predict(gs1, newdata = envdat_test)
+gs1pred <- predict(gs1, envdat_test)
+xx <- data.frame(obs = envdat_test$agdu, pred = gs1pred^2)
+
+## R sq for test data
+caret::defaultSummary(xx)
+
+## Plot of predicted by observed values
+plot(xx)
+
+# model 2
+gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + latitude + ersst, data = envdat_train)
+summary(gs1)
+plot(predict(gs1), residuals(gs1), type = "p")
+
+pred1 <- predict(gs1, newdata = envdat_test)
+gs1pred <- predict(gs1, envdat_test)
+xx <- data.frame(obs = envdat_test$agdu, pred = gs1pred^2)
+
+## R sq for test data
+caret::defaultSummary(xx)
+
+## Plot of predicted by observed values
+plot(xx)
+
+# model 3
+gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + latitude, data = envdat_train)
 summary(gs1)
 plot(predict(gs1), residuals(gs1), type = "p")
 
@@ -80,7 +119,7 @@ xy <- data.frame(envdat_test, agdu_pred = gs1pred^2)
 ## Modeling Scenarios
 * Given planting date and variety maturity, use predicted accumulated GDUs to predict pollination date.
 * Plant development is only affected by GDUs after planting. GDUs prior to planting are subtracted in variable agdu_ap_pred.
-* Predicted pollination date is the date when gdu_mat1 is reached as defined in scenario1.3.
+* Predicted pollination date is the date when gdu_mat# is reached as defined in scenario#.3.
 
 #### Example 1: A researcher plants two varieties on the same date, one that pollinates at 1200 GDUs and one that pollinates at 1400 GDUs. Predict the date each variety will pollinate.
 
