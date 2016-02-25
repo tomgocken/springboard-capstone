@@ -2,22 +2,25 @@
 title: "Capstone Project - Pollination Date Prediction"
 author: "Tom Gocken"
 date: "Monday, February 15, 2016"
-output: word_document
+output: html_document
 ---
 
 ## Introduction
+
 Research sites that develop new plant varieties must predict when certain seasonal events, such as pollination, will occur. These events drive work timelines and allocation of resources. The timing of these events depends on 1) planting date, 2) variety maturity expressed in growing degree units (GDUs) required to reach a specified growth stage, such as pollination or physiological maturity, and 3) how rapidly GDUs accumulate during the growing season. While planting date and variety maturity are known values determined by the researcher, the rate of GDU accumulation depends on conditions that vary by growing season and location.
 
-A linear regression model was developed to predict GDU accumulation during the growing season at five research sites in the U.S. Midwest. Examples are provided demonstrating how predicted accumulated GDUs can be combined with inputs for planting date and variety maturity to predict pollination date and to model planting scenarios.
+A regression model was developed to predict GDU accumulation during the growing season at five research sites in the U.S. Midwest. Examples are provided demonstrating how predicted accumulated GDUs can be combined with inputs for planting date and variety maturity to predict pollination date and to model planting scenarios.
 
 ## Data Sources
 
 * Environmental data for counties of interest: http://wonder.cdc.gov/EnvironmentalData.html
-    + *List variables and provide definitions*
+    + List variables and provide definitions...
 * County centroid coordinates: https://www.census.gov/geo/maps-data/data/gazetteer.html
+* Frost-free growing season length: http://davesgarden.com/guides/freeze-frost-dates/ summarized from http://www.ncdc.noaa.gov/
 * Monthly ERSST data measuring El Nino / La Nina effects: http://www.cpc.noaa.gov/products/analysis_monitoring/ensostuff/ensoyears.shtml
 
 ## GDU Calculation Method
+
 Growing degree units (GDUs), also known as growing degree days, were calculated by taking the average of the daily maximum and minimum temperatures compared to a base temperature, T~base~, as follows:
 
 #### GDU = ((T~max~ + T~min~) / 2) -- T~base~
@@ -30,15 +33,8 @@ where T~max~ is equal to the maximum daily temperature but not greater than a de
 * http://agron-www.agron.iastate.edu/Courses/agron212/Calculations/GDD.htm
 
 ## Data Wrangling Steps
-*Add from previous project*
 
-## Exploratory Data Analysis
-*Add yearly temperature yearly trend, loc differences*
-
-## Model Building
-
-* Create data subset representing U.S. Midwest crop growing season
-* Create training (1992-2009) and test (2010-2011) datasets
+Add from previous project...
 
 ```{r}
 setwd("C:/Projects/springboard-capstone")
@@ -48,75 +44,107 @@ envdat_train <- subset(envdat_inseason, year < 2010)
 envdat_test <- subset(envdat_inseason, year >= 2010)
 ```
 
-#### Correlations
-The selection of model terms was based, in part, on practical concerns. Generally speaking, daily measurements for environmental variables, such as Precipitation, Sunlight, etc. will not be available for the season we wish to predict.
+## Correlations
 
-Fortunately, some of the remaining variables are expected to be good predictors of AGDU. A very high correlation was seen between agdu and Day of Year and lower but potentially meaningful correlations were seen between AGDU and Latitude and ERSST. Although an annual trend for increasing temperatures was observed over the 20 year period of the dataset, the correlation between AGDU and Year was relatively weak. Corrlation between AGDU and Latitude was also low. Unlike Longitude, which measures distance in the North/South direction, Latitude, which measures distance in the East/West direction, was not expected to be strongly associated with heat accumulation. Except for a correlation between Year and ERSST of 0.24, collinearity among variables was very low.
+Below is a heat map showing correlations among all numeric variables and a table showing correlation coefficients greater than 0.3. As expected, high correlations exist between variables that measure similar things, such as ersst, ersst_lag3mo, and ersst_lag6mo measuring recent El Nino effects; gdu, max_air_temp, and min_air_temp measuring daily temperatures; and day_of_year and month measuring time of year.
 
+Even though latitude and longitude both measure geographical position, their correlation (-0.48) is an artifact of the data. Since latitude measures North/South direction and longitude measures East/West direction, the two variables are expected to be uncorrelated in a random selection of locations. The high correlation between grow_season (frost-free growing season length) and latitude (-0.91) is expected since growing season length is directly affected by distance from the equator.
+
+```{r message=FALSE}
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(tidyr)
+```
 ```{r}
-cor(dplyr::select(envdat_inseason, agdu, day_of_yr, latitude, longitude, ersst, year))
+# Heat map of correlation matrix
+corplot1 <- qplot(x=Var1, y=Var2, data=melt(cor(
+  select(envdat_inseason, -county, -date), use="p")), fill=value, geom="tile") +
+  scale_fill_gradient2(limits=c(-1, 1)) # create heatmap
+corplot2 <- corplot1 +
+  theme(axis.text.x=element_text(angle = 90, vjust = 0)) # change label orientation
+print(corplot2)
+
+# Highest correlations
+melt(cor(select(envdat_inseason, -county, -date))) %>% # all numeric variables
+  rename(Corr_Coeff = value) %>%
+  filter(abs(Corr_Coeff) > 0.3 & Corr_Coeff != 1) %>%
+  arrange(as.character(Var1), as.character(Var2))
 ```
 
-Although correlation between AGDU and Day of Year is much higher than with any other dependent variable, the relationship is not linear.
+## Model Building
+#### Day of Year
+
+The strongest correlation between response variable agdu and potential predictor variables was with day_of_year (0.95). However, this relationship is known to be non-linear since GDUs accumulate more slowly during cool days in the early spring and late fall than they do during hot days in the summer. To examine the relationship further, a simple regression model was considered for only day_of_yr. The 20 year dataset was split into a training set consisting of data from 1992 through 2009 and a test set with data from 2010 through 2011. 
+Plotting predicted values versus residuals from the training dataset shows a non-linear distribution with high heteroscedasticity.
 
 ```{r}
-plot(envdat_inseason$day_of_yr, envdat_inseason$agdu)
+lm1 <- lm(agdu ~ day_of_yr, data = envdat_train)
+plot(predict(lm1), residuals(lm1))
 ```
 
-*Describe choice of polynomial model for day_of_yr*
+A cubic polynomial model addresses the issue of non-linearity but heteroscedasticity remains.
+```{r}
 
-#### Possible Models
-Model 1 had an R^2^ of 0.941 for test data based only on 3rd order polynomial terms for Day of Year. Adding Latitude to Model 2 resulted in an R^2^ of 0.993 for test data and further adding ERSST to Model 3 resulted in and R^2^ of 0.994 for test data.
+lm1 <- lm(agdu ~ poly(day_of_yr, 3), data = envdat_train)
+plot(predict(lm1), residuals(lm1))
+```
 
-Inclusion of Day of Year and Latitude are obvious choices. While ERSST adds little to the already very high R^2^, Model 3 was selected since ERSST data is readily available and evidence exists that El Nino events (expressed as negative ERSST values) correspond to lower than normal U.S. Midwest summer temperatures and that La Nina events (expressed as positive ERSST values) correspond to higher than normal U.S. Midwest summer temperatures.
+Heteroscedasticity was addressed with a square root tranformation of response varible agdu, as recommended by James, et al., An Introduction to Statistical Learning (http://www-bcf.usc.edu/~gareth/ISL/).
+```{r}
+lm1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3), data = envdat_train)
+plot(predict(lm1), residuals(lm1))
+```
 
-References:
-http://info.agribank.com/agrithought/Documents/AgriThought_ElNino2015_Final.pdf
-http://agron-www.agron.iastate.edu/courses/Agron541/classes/541/lesson11b/11b.4.html
+#### Other Terms
+
+In addition to Day of Year, other variables were considered using the leaps package. All possible combinations were of numeric variables were considered to predict the square root of agdu for the training dataset. The best model for each subset size is plotted below, starting with the best 1 predictor model at the bottom to the best 8 variable model at the top.
 
 ```{r}
-# Model 1 training data
-gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3), data = envdat_train)
-summary(gs1)
-# Model 1 test data
-pred1 <- predict(gs1, newdata = envdat_test)
-gs1pred <- predict(gs1, envdat_test)
-xx <- data.frame(obs = envdat_test$agdu, pred = gs1pred^2)
-## R sq for test data
-caret::defaultSummary(xx)
+library (leaps)
+envdat_train2 <- select(envdat_train, -county, -date)
+envdat_train2$day_of_yr2 <- envdat_train2$day_of_yr^2
+envdat_train2$day_of_yr3 <- envdat_train2$day_of_yr^3
 
-# Model 2 training data
-gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + latitude, data = envdat_train)
-summary(gs1)
-# Model 2 test data
-pred1 <- predict(gs1, newdata = envdat_test)
-gs1pred <- predict(gs1, envdat_test)
-xx <- data.frame(obs = envdat_test$agdu, pred = gs1pred^2)
-## R sq for test data
-caret::defaultSummary(xx)
+models <- regsubsets(sqrt(agdu) ~ . , nbest = 1, data = envdat_train2)
+plot(models, scale = "bic") # Bayesian Information Criterion
+```
 
-# Model 3 training data
-gs1 <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + latitude + ersst, data = envdat_train)
-summary(gs1)
-# Model 3 test data
-pred1 <- predict(gs1, newdata = envdat_test)
-gs1pred <- predict(gs1, envdat_test)
-xx <- data.frame(obs = envdat_test$agdu, pred = gs1pred^2)
-## R sq for test data
-caret::defaultSummary(xx)
+Note that this type of model fitting isn't ideal for the previously described polynomial variables for Day of Year (variables day_of_yr, doy2, and doy3) since they are considered independently but we are interested in their combined effect. Even so, it provides a good indication of the overall combination of variables that will best predict agdu.
 
-plot(predict(gs1), residuals(gs1))
-plot(xx)
+The terms selected for the model are the cubic polynomial predictors for day of year, grow_season, year, and ersst_lag6mo (El Nino effects from 6 months prior. These terms correspond to the best 5 predictor model plus main effects for day of year. Additional terms provide little additional improvement and risk overfitting.
+
+```{r}
+# Training data results:
+sel_model <- lm(sqrt(agdu) ~ poly(day_of_yr, 3) + grow_season 
+          + year + ersst_lag6mo, data = envdat_train)
+summary(sel_model)
+
+agdu_predsqrt <- predict(sel_model, envdat_test)
+agdu_compare <- data.frame(obs = envdat_test$agdu, pred = agdu_predsqrt^2)
+
+# R sq for test data:
+caret::defaultSummary(agdu_compare)
+
+plot(predict(sel_model), residuals(sel_model))
+plot(agdu_compare)
 ```
 
 ## Prediction Scenarios
-* Given planting date and variety maturity, use predicted accumulated GDUs to predict pollination date.
+
+As a researcher, the practical value of pollination date prediction is to model different planting scenarios and make informed resourcing decisions. Below are examples.
+
+Considerations:
+
+* Planting date and variety maturity are user provided inputs.
 * Plant development is only affected by GDUs after planting. GDUs prior to planting are subtracted in variable agdu_ap_pred.
 * Predicted pollination date is the date when gdu_mat# is reached as defined in scenario#.3.
 
 #### Example 1: A researcher plants two varieties on the same date, one that pollinates at 1200 GDUs and one that pollinates at 1400 GDUs. Predict the date each variety will pollinate.
 
 ```{r}
+xy <- data.frame(envdat_test, agdu_pred = agdu_predsqrt^2)
+
 # Scenario 1 inputs:
 loc1 <- "Iowa County, IA"
 plant_yr1 <- 2011
@@ -132,24 +160,23 @@ gdu_mat2 <- 1400
 scenario1.1 <- subset(xy, county == loc1 
                       & year == plant_yr1 
                       & day_of_yr == plant_day1 - 1)
-scenario1.2 <- dplyr::mutate(subset(xy, county == loc1 
+scenario1.2 <- mutate(subset(xy, county == loc1 
                                     & year == plant_yr1 
                                     & day_of_yr >= plant_day1),
                              agdu_ap_pred = agdu_pred - scenario1.1$agdu_pred)
-scenario1.3 <- dplyr::filter(scenario1.2, abs(agdu_ap_pred - gdu_mat1) 
+scenario1.3 <- filter(scenario1.2, abs(agdu_ap_pred - gdu_mat1) 
                              == min(abs(agdu_ap_pred - gdu_mat1)))
 
 scenario2.1 <- subset(xy, county == loc2 
                       & year == plant_yr2 
                       & day_of_yr == plant_day2 - 1)
-scenario2.2 <- dplyr::mutate(subset(xy, county == loc2 
+scenario2.2 <- mutate(subset(xy, county == loc2 
                                     & year == plant_yr2 
                                     & day_of_yr >= plant_day2),
                              agdu_ap_pred = agdu_pred - scenario2.1$agdu_pred)
-scenario2.3 <- dplyr::filter(scenario2.2, abs(agdu_ap_pred - gdu_mat2)
+scenario2.3 <- filter(scenario2.2, abs(agdu_ap_pred - gdu_mat2)
                              == min(abs(agdu_ap_pred - gdu_mat2)))
 
-library(ggplot2)
 ggplot(mapping = aes(x = day_of_yr, y = agdu_ap_pred)) +
   geom_line(data = scenario1.2, color = "blue", size = 1) +
   geom_segment(aes(x = min(scenario1.2$day_of_yr), y = gdu_mat1,
@@ -186,21 +213,21 @@ gdu_mat2 <- 1300
 scenario1.1 <- subset(xy, county == loc1 
                       & year == plant_yr1 
                       & day_of_yr == plant_day1 - 1)
-scenario1.2 <- dplyr::mutate(subset(xy, county == loc1 
+scenario1.2 <- mutate(subset(xy, county == loc1 
                                     & year == plant_yr1 
                                     & day_of_yr >= plant_day1),
                              agdu_ap_pred = agdu_pred - scenario1.1$agdu_pred)
-scenario1.3 <- dplyr::filter(scenario1.2, abs(agdu_ap_pred - gdu_mat1) 
+scenario1.3 <- filter(scenario1.2, abs(agdu_ap_pred - gdu_mat1) 
                              == min(abs(agdu_ap_pred - gdu_mat1)))
 
 scenario2.1 <- subset(xy, county == loc2 
                       & year == plant_yr2 
                       & day_of_yr == plant_day2 - 1)
-scenario2.2 <- dplyr::mutate(subset(xy, county == loc2 
+scenario2.2 <- mutate(subset(xy, county == loc2 
                                     & year == plant_yr2 
                                     & day_of_yr >= plant_day2),
                              agdu_ap_pred = agdu_pred - scenario2.1$agdu_pred)
-scenario2.3 <- dplyr::filter(scenario2.2, abs(agdu_ap_pred - gdu_mat2)
+scenario2.3 <- filter(scenario2.2, abs(agdu_ap_pred - gdu_mat2)
                              == min(abs(agdu_ap_pred - gdu_mat2)))
 
 ggplot(mapping = aes(x = day_of_yr, y = agdu_ap_pred)) +
@@ -222,6 +249,28 @@ ggplot(mapping = aes(x = day_of_yr, y = agdu_ap_pred)) +
 scenario1.3$date
 scenario2.3$date
 ```
-Because GDUs accumulate more slowly in the early spring, a 14 day planting delay is predicted to result in only a 5 day delay in pollination.
+Because GDUs accumulate more slowly in the early spring, a 14 day planting delay is predicted to result in only a 4 day delay in pollination.
 
 ## Conclusions
+...
+
+## Follow-up before submitting...
+
+* Replace above model with robust linear model with no sqrt transformation?
+* Get feedback from Henry
+
+```{r}
+# Training data results:
+sel_model_rlm <- MASS::rlm(agdu ~ poly(day_of_yr, 3) + grow_season 
+                 + year + ersst_lag6mo, data = envdat_train)
+summary(sel_model_rlm)
+
+agdu_pred_rlm <- predict(sel_model_rlm, envdat_test)
+agdu_compare_rlm <- data.frame(obs = envdat_test$agdu, pred = agdu_pred_rlm)
+
+# R sq for test data:
+caret::defaultSummary(agdu_compare_rlm)
+
+plot(predict(sel_model), residuals(sel_model))
+plot(agdu_compare)
+```
