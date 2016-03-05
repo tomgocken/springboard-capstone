@@ -7,7 +7,7 @@ output: html_document
 
 ## Introduction
 
-Research sites that develop new plant varieties must forecast when certain seasonal events, such as pollination, will occur. These events drive work timelines and allocation of resources. The timing of pollination depends on 1) planting date, 2) variety maturity expressed in growing degree units (GDUs) required for pollination, and 3) how rapidly GDUs accumulate during the growing season. While planting date and variety maturity are known values determined by the researcher, the rate of GDU accumulation depends on conditions that vary by growing season and location.
+Research sites that develop new plant varieties must forecast when certain seasonal events, such as pollination, will occur. These events drive work timelines and allocation of resources. The timing of pollination depends on 1) planting date, 2) variety maturity, expressed in growing degree units (GDUs) needed for pollination, and 3) how rapidly GDUs accumulate during the growing season. While planting date and variety maturity are known values determined by the researcher, the rate of GDU accumulation depends on conditions that vary by growing season and location.
 
 A regression model was developed to predict GDU accumulation during the growing season at five research sites in the U.S. Midwest. Examples are provided demonstrating how predicted accumulated GDUs can be combined with inputs for planting date and variety maturity to forecast pollination date and to model planting scenarios.
 
@@ -176,6 +176,7 @@ melt(cor(select(envdat_inseason, -county, -date))) %>% # all numeric variables
   rename(Corr_Coeff = value) %>%
   filter(abs(Corr_Coeff) > 0.3 & Corr_Coeff != 1) %>%
   arrange(as.character(Var1), as.character(Var2))
+
 ```
 
 ## Model Building
@@ -222,7 +223,7 @@ plot(models, scale = "bic") # Bayesian Information Criterion
 
 Note that this type of model fitting isn't ideal for the previously described polynomial variables for Day of Year (day_of_yr, day_of_yr2, and day_of_yr3) since they are considered independently but we are interested in their combined effect. Even so, it provides a good indication of the overall combination of variables that will best predict agdu.
 
-The terms selected for the model are the cubic polynomial predictors for day of year, latitude, longitude, year, and sst_prior6mo (El Nino effects from 6 months prior. These terms correspond to the best 7 predictor model. Additional terms provide little additional improvement and risk overfitting.
+The terms selected for the model are the cubic polynomial predictors for day of year, latitude, longitude, year, and sst_prior6mo (El Nino effects from 6 months prior). These terms correspond to the best 7 predictor model. Additional terms provide little additional improvement and risk overfitting.
 
 #### Robust Residual Standard Errors
 
@@ -312,7 +313,7 @@ ggplot(mapping = aes(x = day_of_yr, y = agdu_ap_pred)) +
 
 s1 <- data.frame(c(Scenario = 1, select(scenario1.3, day_of_yr, date)))
 s2 <- data.frame(c(Scenario = 2, select(scenario2.3, day_of_yr, date)))
-stargazer(union(s1, s2), summary = FALSE, type="text")
+stargazer(arrange(union(s1, s2), Scenario), summary = FALSE, type="text")
 
 ```
 #### Example 2: A researcher intended to plant on April 14 (day 105) but was delayed for 14 days due to rain. Predict the number of days that pollination will be delayed.
@@ -369,7 +370,7 @@ ggplot(mapping = aes(x = day_of_yr, y = agdu_ap_pred)) +
 
 s1 <- data.frame(c(Scenario = 1, select(scenario1.3, day_of_yr, date)))
 s2 <- data.frame(c(Scenario = 2, select(scenario2.3, day_of_yr, date)))
-stargazer(union(s1, s2), summary = FALSE, type="text")
+stargazer(arrange(union(s1, s2), Scenario), summary = FALSE, type="text")
 
 ```
 Because GDUs accumulate more slowly in the early spring, a 14 day planting delay is predicted to result in only a 3 day delay in pollination for this combination of inputs.
@@ -377,4 +378,4 @@ Because GDUs accumulate more slowly in the early spring, a 14 day planting delay
 ## Conclusions
 Researchers developing new plant varieties must accurately forecast pollination date to properly allocate resources. This project demonstrated how predictions for accumulated GDUs, when combined with user provided inputs for planting date and variety maturity, can be used to forecast pollination date. Examples were provided comparing different planting scenarios and their impact on pollination date.
 
-A regression model was developed to predict accumulated GDUs based on seasonal, geographical, and environmental variables. While the model was based on specific conditions from five locations in the U.S. Midwest and should not be used to make predictions outside of this region, the code and steps could be readily applied to build a similar model using data from any other region of interest.
+A regression model was developed to predict accumulated GDUs based on seasonal, geographical, and environmental variables. While the model was based on specific conditions from five locations in the U.S. Midwest and should not be used to make predictions outside of this region, the code and steps provided here could be readily applied to build a similar model using data from any other region of interest.
