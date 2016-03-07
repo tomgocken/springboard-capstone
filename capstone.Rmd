@@ -194,13 +194,13 @@ lm_doy3 <- lm(agdu ~ poly(day_of_yr, 3), data = envdat_train)
 plot_doy <- ggplot(aes(x = predict(lm_doy), y = residuals(lm_doy)), 
                    data = envdat_train) + geom_jitter(alpha = 1/6) +
                    geom_smooth(color = 'yellow') +
-                   labs(x = "Residuals", y = "Accumulated GDU Predictions",
+                   labs(x = "Accumulated GDU Predictions", y = "Residuals",
                         title = "Day of Year Model")
                
 plot_doy3 <- ggplot(aes(x = predict(lm_doy3), y = residuals(lm_doy3)), 
                     data = envdat_train) + geom_jitter(alpha = 1/6) + 
                     geom_smooth(color = 'yellow') +
-                    labs(x = "Residuals", y = "Accumulated GDU Predictions",
+                    labs(x = "Accumulated GDU Predictions", y = "Residuals",
                          title = "Day of Year Cubic Model")
 
 grid.arrange(plot_doy, plot_doy3, ncol = 1)
